@@ -1,0 +1,25 @@
+@config "../../tailwind.config.ts";
+@import "tailwindcss";
+
+:root {
+  --background: 215 35% 8%;
+  --foreground: 210 40% 96%;
+  --card: 216 29% 13%;
+  --card-foreground: 210 40% 96%;
+  --border: 215 24% 22%;
+  --muted: 218 19% 18%;
+  --muted-foreground: 214 20% 72%;
+  --primary: 36 94% 58%;
+  --primary-foreground: 215 35% 8%;
+  --secondary: 190 60% 36%;
+  --secondary-foreground: 210 40% 96%;
+  --radius: 0.8rem;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(255, 170, 64, 0.2), transparent),
+    radial-gradient(900px 500px at 90% 0%, rgba(38, 174, 204, 0.18), transparent),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+}

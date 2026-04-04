@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionTier {
+  insider
+  core
+  pro
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+  incomplete
+  trialing
+}
+
+enum MediaType {
+  pdf
+  epub
+  audio
+}
+
+model User {
+  id               String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email            String         @unique
+  fullName         String?        @map("full_name")
+  avatarUrl        String?        @map("avatar_url")
+  stripeCustomerId String?        @unique @map("stripe_customer_id")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(6)
+  subscription     Subscription?
+  roles            UserRole[]
+  progress         UserProgress[]
+  notes            Note[]
+  bookmarks        Bookmark[]
+  auditLogs        AdminAuditLog[] @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String             @unique @map("user_id") @db.Uuid
+  stripeSubscriptionId String             @unique @map("stripe_subscription_id")
+  stripePriceId        String             @map("stripe_price_id")
+  tier                 SubscriptionTier
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime?          @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd     DateTime?          @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Course {
+  id           String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title        String
+  slug         String           @unique
+  description  String?
+  thumbnailUrl String?          @map("thumbnail_url")
+  requiredTier SubscriptionTier @map("required_tier")
+  isPublished  Boolean          @default(false) @map("is_published")
+  orderIndex   Int              @default(0) @map("order_index")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  modules      Module[]
+
+  @@map("courses")
+}
+
+model Module {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  courseId    String    @map("course_id") @db.Uuid
+  title       String
+  slug        String
+  description String?
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+
+  @@unique([courseId, slug])
+  @@map("modules")
+}
+
+model Lesson {
+  id         String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  moduleId   String         @map("module_id") @db.Uuid
+  title      String
+  slug       String
+  content    String?
+  videoUrl   String?        @map("video_url")
+  duration   Int?
+  isPreview  Boolean        @default(false) @map("is_preview")
+  orderIndex Int            @default(0) @map("order_index")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  module     Module         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress   UserProgress[]
+  notes      Note[]
+  bookmarks  Bookmark[]
+
+  @@unique([moduleId, slug])
+  @@map("lessons")
+}
+
+model UserProgress {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  lessonId     String    @map("lesson_id") @db.Uuid
+  completed    Boolean   @default(false)
+  lastPosition Int       @default(0) @map("last_position")
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson       Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("user_progress")
+}
+
+model Note {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  lessonId  String    @map("lesson_id") @db.Uuid
+  content   String
+  timestamp Int?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("notes")
+}
+
+model Bookmark {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  lessonId  String   @map("lesson_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("bookmarks")
+}
+
+model MediaLibrary {
+  id           String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title        String
+  type         MediaType
+  filePath     String           @map("file_path")
+  requiredTier SubscriptionTier @map("required_tier")
+  duration     Int?
+  pages        Int?
+  coverUrl     String?          @map("cover_url")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("media_library")
+}
+
+model Role {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  users     UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId    String   @map("user_id") @db.Uuid
+  roleId    Int      @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor      User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@map("admin_audit_logs")
+}
