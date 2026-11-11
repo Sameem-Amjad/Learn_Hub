@@ -1,0 +1,8 @@
+.env
+.env.local
+.env.*.local
+.history
+scripts/.media
+.next
+node_modules
+*.tsbuildinfo
