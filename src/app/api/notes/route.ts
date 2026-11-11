@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createServiceRoleClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceRoleClient, getCurrentUser } from "@/lib/supabase/server";
 
 const createSchema = z.object({
   lessonId: z.string().uuid(),
-  content: z.string().min(1),
-  timestamp: z.number().int().nonnegative().optional()
+  content: z.string().trim().min(1).max(2000),
+  timestamp: z.number().int().nonnegative().max(24 * 3600).optional()
 });
 
 export async function GET(req: Request) {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,16 +39,17 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = createSchema.parse(await req.json());
+  const parsed = createSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Write a note of up to 2,000 characters." }, { status: 400 });
+  }
+  const body = parsed.data;
   const client = createServiceRoleClient();
   const { data, error } = await client
     .from("notes")
@@ -61,7 +59,7 @@ export async function POST(req: Request) {
       content: body.content,
       timestamp: body.timestamp ?? null
     })
-    .select("*")
+    .select("id,content,timestamp,created_at")
     .single();
 
   if (error) {

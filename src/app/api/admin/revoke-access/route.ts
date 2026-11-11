@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { writeAdminAuditLog } from "@/lib/server/admin-audit";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/utils/admin-auth";
+import { revokePlans } from "@/lib/server/subscriptions";
+import { guardDemoAdminTargets, requireAdmin } from "@/lib/utils/admin-auth";
 
 const schema = z.object({ userId: z.string().uuid() });
 
@@ -13,28 +13,24 @@ export async function POST(req: Request) {
     return errorResponse;
   }
 
-  const parsed = schema.safeParse(await req.json());
+  const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const body = parsed.data;
+  const blocked = await guardDemoAdminTargets(user, [parsed.data.userId]);
+  if (blocked) return blocked;
 
-  await prisma.subscription.updateMany({
-    where: { userId: body.userId },
-    data: {
-      status: "canceled",
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd: new Date(),
-      updatedAt: new Date()
-    }
-  });
+  const affected = await revokePlans([parsed.data.userId]);
+  if (affected === 0) {
+    return NextResponse.json({ error: "This user has no plan to revoke" }, { status: 400 });
+  }
 
   await writeAdminAuditLog({
-    actorUserId: user?.id,
+    actorUserId: user.id,
     action: "revoke_access",
     entityType: "user",
-    entityId: body.userId
+    entityId: parsed.data.userId
   });
 
   return NextResponse.json({ ok: true });

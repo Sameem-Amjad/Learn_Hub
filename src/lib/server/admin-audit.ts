@@ -1,21 +1,25 @@
-import type { Prisma } from "@prisma/client";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
-import { prisma } from "@/lib/prisma";
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 export async function writeAdminAuditLog(input: {
   actorUserId?: string | null;
   action: string;
   entityType: string;
   entityId?: string | null;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: Json;
 }) {
-  await prisma.adminAuditLog.create({
-    data: {
-      actorUserId: input.actorUserId ?? null,
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId ?? null,
-      metadata: input.metadata ?? ({} as Prisma.InputJsonValue)
-    }
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from("admin_audit_logs").insert({
+    actor_user_id: input.actorUserId ?? null,
+    action: input.action,
+    entity_type: input.entityType,
+    entity_id: input.entityId ?? null,
+    metadata: input.metadata ?? {}
   });
+
+  if (error) {
+    // The action itself already happened; a missing log line must not undo it.
+    console.error("admin audit log failed", error.message);
+  }
 }

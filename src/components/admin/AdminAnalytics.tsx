@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface AnalyticsResponse {
   users: number;
   activeSubscriptions: number;
+  pastDue: number;
   byTier: { insider: number; core: number; pro: number };
   publishedCourses: number;
   lessons: number;
@@ -37,25 +38,31 @@ export function AdminAnalytics() {
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
         <CardHeader>
-          <CardTitle>Total Users</CardTitle>
+          <CardTitle>Learners</CardTitle>
         </CardHeader>
-        <CardContent>{data.users}</CardContent>
+        <CardContent className="text-2xl font-semibold">{data.users}</CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Active Subscriptions</CardTitle>
+          <CardTitle>Active plans</CardTitle>
         </CardHeader>
-        <CardContent>{data.activeSubscriptions}</CardContent>
+        <CardContent>
+          <p className="text-2xl font-semibold">{data.activeSubscriptions}</p>
+          <p className="text-xs text-muted-foreground">{data.pastDue} past due</p>
+        </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Completion Rate</CardTitle>
+          <CardTitle>Lessons finished</CardTitle>
         </CardHeader>
-        <CardContent>{data.completionRate}%</CardContent>
+        <CardContent>
+          <p className="text-2xl font-semibold">{data.completionRate}%</p>
+          <p className="text-xs text-muted-foreground">of started lessons are complete</p>
+        </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Tier Mix</CardTitle>
+          <CardTitle>Plans by tier</CardTitle>
         </CardHeader>
         <CardContent>
           <p>Insider: {data.byTier.insider}</p>
@@ -65,15 +72,15 @@ export function AdminAnalytics() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Published Courses</CardTitle>
+          <CardTitle>Published courses</CardTitle>
         </CardHeader>
-        <CardContent>{data.publishedCourses}</CardContent>
+        <CardContent className="text-2xl font-semibold">{data.publishedCourses}</CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Total Lessons</CardTitle>
+          <CardTitle>Lessons</CardTitle>
         </CardHeader>
-        <CardContent>{data.lessons}</CardContent>
+        <CardContent className="text-2xl font-semibold">{data.lessons}</CardContent>
       </Card>
     </div>
   );

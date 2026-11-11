@@ -7,5 +7,6 @@ export async function POST(req: Request) {
   await supabase.auth.signOut();
 
   const origin = new URL(req.url).origin;
-  return NextResponse.redirect(`${origin}/login`);
+  // 303 so the browser follows with a GET, not a second POST.
+  return NextResponse.redirect(`${origin}/login`, 303);
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { prisma } from "@/lib/prisma";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/utils/admin-auth";
 
 const querySchema = z.object({
@@ -30,57 +30,50 @@ export async function GET(req: Request) {
   }
 
   const { page, pageSize, action, entityType } = parsed.data;
-  const skip = (page - 1) * pageSize;
+  const from = (page - 1) * pageSize;
 
-  const where = {
-    ...(action ? { action } : {}),
-    ...(entityType ? { entityType } : {})
+  const supabase = createServiceRoleClient();
+  let query = supabase
+    .from("admin_audit_logs")
+    .select("id,action,entity_type,entity_id,metadata,created_at,actor:actor_user_id(id,email,full_name)", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  if (action) query = query.eq("action", action);
+  if (entityType) query = query.eq("entity_type", entityType);
+
+  const { data, count, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Name what each entry touched: a user's name or email, or a course's title.
+  type Log = { id: string; action: string; entity_type: string; entity_id: string | null; metadata: Record<string, unknown> | null; created_at: string; actor: unknown };
+  const logs = (data ?? []) as Log[];
+  const userIds = [...new Set(logs.filter((l) => l.entity_type === "user" && l.entity_id).map((l) => l.entity_id!))];
+  const courseIds = [
+    ...new Set(
+      logs
+        .filter((l) => l.entity_type === "course")
+        .flatMap((l) => [l.entity_id, ...((l.metadata?.ids as string[] | undefined) ?? [])])
+        .filter((id): id is string => Boolean(id))
+    )
+  ];
+  const [usersRes, coursesRes] = await Promise.all([
+    userIds.length ? supabase.from("users").select("id,email,full_name").in("id", userIds) : Promise.resolve({ data: [] }),
+    courseIds.length ? supabase.from("courses").select("id,title").in("id", courseIds) : Promise.resolve({ data: [] })
+  ]);
+  const userName = new Map(((usersRes.data ?? []) as { id: string; email: string; full_name: string | null }[]).map((u) => [u.id, u.full_name ?? u.email]));
+  const courseName = new Map(((coursesRes.data ?? []) as { id: string; title: string }[]).map((c) => [c.id, c.title]));
+  const describe = (l: Log) => {
+    const ids = (l.metadata?.ids as string[] | undefined) ?? (l.entity_id ? [l.entity_id] : []);
+    const names = ids.map((id) => (l.entity_type === "course" ? courseName.get(id) : userName.get(id)) ?? "a removed record");
+    return names.length > 2 ? `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` : names.join(", ");
   };
 
-  const [total, logs] = await Promise.all([
-    prisma.adminAuditLog.count({ where }),
-    prisma.adminAuditLog.findMany({
-      where,
-      skip,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        action: true,
-        entityType: true,
-        entityId: true,
-        createdAt: true,
-        actor: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true
-          }
-        }
-      }
-    })
-  ]);
-
+  const total = count ?? 0;
   return NextResponse.json({
-    logs: logs.map((log:any) => ({
-      id: log.id,
-      action: log.action,
-      entity_type: log.entityType,
-      entity_id: log.entityId,
-      created_at: log.createdAt,
-      actor: log.actor
-        ? {
-            id: log.actor.id,
-            email: log.actor.email,
-            full_name: log.actor.fullName
-          }
-        : null
-    })),
-    pagination: {
-      page,
-      pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize)
-    }
+    logs: logs.map((l) => ({ ...l, target: describe(l) })),
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
   });
 }

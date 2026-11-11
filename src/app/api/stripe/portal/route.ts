@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { DEMO_MODE } from "@/lib/demo";
 import { stripe } from "@/lib/stripe/server";
 import { createServiceRoleClient, createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function POST() {
+  if (DEMO_MODE) {
+    return NextResponse.json({ error: "The Stripe billing portal is off in this demo." }, { status: 400 });
+  }
+
   const supabase = await createServerSupabaseClient();
   const {
     data: { user }

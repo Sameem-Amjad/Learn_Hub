@@ -6,7 +6,7 @@ Production-focused Next.js App Router platform with Supabase authentication/data
 
 - Next.js 16 (App Router, TypeScript)
 - Supabase (Auth, Postgres, Storage)
-- Prisma ORM (PostgreSQL)
+- supabase-js on the server (service role) for data access, with RLS for anything the browser reads
 - Stripe (Checkout, Billing Portal, Webhooks)
 - Tailwind CSS + shadcn-style UI primitives
 - React Query + Zustand
@@ -22,7 +22,7 @@ npm install
 2. Configure environment variables:
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local   # then fill it in
 ```
 
 3. Set up Supabase schema by running [supabase/schema.sql](supabase/schema.sql).
@@ -44,10 +44,6 @@ Set price IDs in `.env.local`:
 - `STRIPE_PRICE_INSIDER`
 - `STRIPE_PRICE_CORE`
 - `STRIPE_PRICE_PRO`
-
-Set Prisma database connection:
-
-- `DATABASE_URL` (Supabase Postgres connection string)
 
 ## API Endpoints
 
@@ -94,15 +90,23 @@ Set Prisma database connection:
 - Admin roles can be managed from the Admin dashboard and /admin/roles screen.
 - Stripe remains source of truth for subscription state.
 
-## Prisma Commands
+## Demo on the shared Supabase hub
 
-```bash
-npm run prisma:generate
-```
+The `demo` branch runs LearnHub inside the `learnhub` schema of a shared
+Supabase project, with sample data and Stripe switched off.
 
-```bash
-npm run prisma:migrate
-```
+1. Run [supabase/hub/schema.sql](supabase/hub/schema.sql) in the SQL editor and add
+   `learnhub` to Project Settings → Data API → Exposed schemas.
+2. Build the demo media (narrated lesson videos, PDFs, audio, EPUB) into
+   `scripts/.media/`: `DEEPGRAM_API_KEY=… PLAYWRIGHT_CORE=… CHROME=… node scripts/make-media.mjs`.
+3. Seed (also resets the demo): `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… npm run seed:hub`.
+4. Set `NEXT_PUBLIC_SUPABASE_DB_SCHEMA=learnhub`, `SUPABASE_MEDIA_BUCKET=learnhub-media` and
+   `NEXT_PUBLIC_DEMO_MODE=true` alongside the Supabase URL and keys.
+
+In demo mode, choosing a plan switches it on without a card, and the billing
+page shows the plan instead of opening Stripe. The demo admin
+(`app_metadata.no_delete`) can change plans and roles of the sample learners
+only, and can't remove admin roles or unpublish courses.
 
 ## Testing Checklist
 

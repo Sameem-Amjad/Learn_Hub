@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { prisma } from "@/lib/prisma";
+import { isNoDeleteUser } from "@/lib/demo";
 import { writeAdminAuditLog } from "@/lib/server/admin-audit";
-import { requireAdmin } from "@/lib/utils/admin-auth";
+import { activatePlan, existingUserIds, revokePlans } from "@/lib/server/subscriptions";
+import { createServiceRoleClient } from "@/lib/supabase/server";
+import { guardDemoAdminTargets, requireAdmin } from "@/lib/utils/admin-auth";
 import { sanitizeUuidArray } from "@/lib/utils/admin-validation";
 
 const schema = z.discriminatedUnion("action", [
@@ -23,102 +25,53 @@ export async function POST(req: Request) {
     return errorResponse;
   }
 
-  const parsed = schema.safeParse(await req.json());
+  const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const body = parsed.data;
   const ids = sanitizeUuidArray(body.ids, 200);
+  const supabase = createServiceRoleClient();
 
   if (body.action === "publish_courses" || body.action === "unpublish_courses") {
-    const existing = await prisma.course.findMany({ where: { id: { in: ids } }, select: { id: true } });
-    if (existing.length !== ids.length) {
+    if (body.action === "unpublish_courses" && isNoDeleteUser(user)) {
+      return NextResponse.json({ error: "The demo admin can publish drafts but can't take courses down." }, { status: 403 });
+    }
+
+    const { data: existing } = await supabase.from("courses").select("id").in("id", ids);
+    if ((existing ?? []).length !== ids.length) {
       return NextResponse.json({ error: "One or more course IDs do not exist" }, { status: 400 });
     }
 
-    const result = await prisma.course.updateMany({
-      where: { id: { in: ids } },
-      data: { isPublished: body.action === "publish_courses", updatedAt: new Date() }
-    });
-
-    await writeAdminAuditLog({
-      actorUserId: user?.id,
-      action: body.action,
-      entityType: "course",
-      metadata: { ids }
-    });
-
-    return NextResponse.json({ ok: true, affected: result.count });
-  }
-
-  if (body.action === "grant_tier") {
-    const existing = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true } });
-    if (existing.length !== ids.length) {
-      return NextResponse.json({ error: "One or more user IDs do not exist" }, { status: 400 });
+    const { data, error } = await supabase
+      .from("courses")
+      .update({ is_published: body.action === "publish_courses", updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .select("id");
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const now = new Date();
-    const end = new Date(now);
-    end.setDate(end.getDate() + 30);
-
-    for (const userId of ids) {
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: {
-          userId,
-          stripeSubscriptionId: `manual_bulk_${userId}_${Date.now()}`,
-          stripePriceId: `manual_${body.tier}`,
-          tier: body.tier,
-          status: "active",
-          currentPeriodStart: now,
-          currentPeriodEnd: end,
-          cancelAtPeriodEnd: false,
-          updatedAt: now
-        },
-        update: {
-          stripePriceId: `manual_${body.tier}`,
-          tier: body.tier,
-          status: "active",
-          currentPeriodStart: now,
-          currentPeriodEnd: end,
-          cancelAtPeriodEnd: false,
-          updatedAt: now
-        }
-      });
-    }
-
-    await writeAdminAuditLog({
-      actorUserId: user?.id,
-      action: "grant_tier_bulk",
-      entityType: "user",
-      metadata: { ids, tier: body.tier }
-    });
-
-    return NextResponse.json({ ok: true, affected: ids.length });
+    await writeAdminAuditLog({ actorUserId: user.id, action: body.action, entityType: "course", metadata: { ids } });
+    return NextResponse.json({ ok: true, affected: (data ?? []).length });
   }
 
-  const existing = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true } });
-  if (existing.length !== ids.length) {
+  const found = await existingUserIds(ids);
+  if (found.size !== ids.length) {
     return NextResponse.json({ error: "One or more user IDs do not exist" }, { status: 400 });
   }
 
-  const result = await prisma.subscription.updateMany({
-    where: { userId: { in: ids } },
-    data: {
-      status: "canceled",
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd: new Date(),
-      updatedAt: new Date()
-    }
-  });
+  const blocked = await guardDemoAdminTargets(user, ids);
+  if (blocked) return blocked;
 
-  await writeAdminAuditLog({
-    actorUserId: user?.id,
-    action: "revoke_access_bulk",
-    entityType: "user",
-    metadata: { ids }
-  });
+  if (body.action === "grant_tier") {
+    await activatePlan(ids, body.tier, { source: "admin" });
+    await writeAdminAuditLog({ actorUserId: user.id, action: "grant_tier_bulk", entityType: "user", metadata: { ids, tier: body.tier } });
+    return NextResponse.json({ ok: true, affected: ids.length });
+  }
 
-  return NextResponse.json({ ok: true, affected: result.count });
+  const affected = await revokePlans(ids);
+  await writeAdminAuditLog({ actorUserId: user.id, action: "revoke_access_bulk", entityType: "user", metadata: { ids } });
+  return NextResponse.json({ ok: true, affected });
 }

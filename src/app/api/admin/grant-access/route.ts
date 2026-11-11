@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { writeAdminAuditLog } from "@/lib/server/admin-audit";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/utils/admin-auth";
+import { activatePlan, existingUserIds } from "@/lib/server/subscriptions";
+import { guardDemoAdminTargets, requireAdmin } from "@/lib/utils/admin-auth";
 
 const schema = z.object({
   userId: z.string().uuid(),
@@ -17,48 +17,23 @@ export async function POST(req: Request) {
     return errorResponse;
   }
 
-  const parsed = schema.safeParse(await req.json());
+  const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const body = parsed.data;
-
-  const targetUser = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
-  if (!targetUser) {
+  if (!(await existingUserIds([body.userId])).has(body.userId)) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const now = new Date();
-  const end = new Date(now);
-  end.setDate(end.getDate() + (body.durationDays ?? 30));
+  const blocked = await guardDemoAdminTargets(user, [body.userId]);
+  if (blocked) return blocked;
 
-  await prisma.subscription.upsert({
-    where: { userId: body.userId },
-    create: {
-      userId: body.userId,
-      stripeSubscriptionId: `manual_${body.userId}_${Date.now()}`,
-      stripePriceId: `manual_${body.tier}`,
-      tier: body.tier,
-      status: "active",
-      currentPeriodStart: now,
-      currentPeriodEnd: end,
-      cancelAtPeriodEnd: false,
-      updatedAt: now
-    },
-    update: {
-      stripePriceId: `manual_${body.tier}`,
-      tier: body.tier,
-      status: "active",
-      currentPeriodStart: now,
-      currentPeriodEnd: end,
-      cancelAtPeriodEnd: false,
-      updatedAt: now
-    }
-  });
+  await activatePlan([body.userId], body.tier, { days: body.durationDays, source: "admin" });
 
   await writeAdminAuditLog({
-    actorUserId: user?.id,
+    actorUserId: user.id,
     action: "grant_access",
     entityType: "user",
     entityId: body.userId,

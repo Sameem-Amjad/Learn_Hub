@@ -220,7 +220,7 @@ export function LandingExperience() {
                       <p className="text-xs text-muted-foreground">{item.role}</p>
                     </div>
                   </div>
-                  <p className="text-sm leading-relaxed text-foreground/90">"{item.quote}"</p>
+                  <p className="text-sm leading-relaxed text-foreground/90">&ldquo;{item.quote}&rdquo;</p>
                 </CardContent>
               </Card>
             </motion.div>

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { prisma } from "@/lib/prisma";
+import { isEditableByDemoAdmin, isNoDeleteUser } from "@/lib/demo";
 import { writeAdminAuditLog } from "@/lib/server/admin-audit";
-import { requireAdmin } from "@/lib/utils/admin-auth";
+import { existingUserIds } from "@/lib/server/subscriptions";
+import { createServiceRoleClient } from "@/lib/supabase/server";
+import { guardDemoAdminTargets, requireAdmin } from "@/lib/utils/admin-auth";
 
 const getQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -16,8 +18,16 @@ const roleMutationSchema = z.object({
   role: z.literal("admin").default("admin")
 });
 
+const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
+
+async function adminRoleId() {
+  const supabase = createServiceRoleClient();
+  const { data } = await supabase.from("roles").select("id").eq("name", "admin").maybeSingle();
+  return (data as { id: number } | null)?.id ?? null;
+}
+
 export async function GET(req: Request) {
-  const { errorResponse } = await requireAdmin();
+  const { errorResponse, user: actor } = await requireAdmin();
   if (errorResponse) {
     return errorResponse;
   }
@@ -26,7 +36,7 @@ export async function GET(req: Request) {
   const parsed = getQuerySchema.safeParse({
     page: params.get("page") ?? "1",
     pageSize: params.get("pageSize") ?? "10",
-    search: params.get("search") ?? undefined
+    search: params.get("search") || undefined
   });
 
   if (!parsed.success) {
@@ -34,52 +44,34 @@ export async function GET(req: Request) {
   }
 
   const { page, pageSize, search } = parsed.data;
-  const skip = (page - 1) * pageSize;
+  const from = (page - 1) * pageSize;
+  const supabase = createServiceRoleClient();
 
-  const where = search
-    ? {
-        OR: [
-          { email: { contains: search, mode: "insensitive" as const } },
-          { fullName: { contains: search, mode: "insensitive" as const } }
-        ]
-      }
-    : {};
+  let query = supabase
+    .from("user_directory")
+    .select("id,email,full_name,created_at,is_admin", { count: "exact" })
+    .order("is_admin", { ascending: false })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
 
-  const [total, users] = await Promise.all([
-    prisma.user.count({ where }),
-    prisma.user.findMany({
-      where,
-      skip,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        createdAt: true,
-        roles: {
-          where: { role: { name: "admin" } },
-          select: { roleId: true },
-          take: 1
-        }
-      }
-    })
-  ]);
+  const term = search ? clean(search) : "";
+  if (term) query = query.or(`email.ilike.*${term}*,full_name.ilike.*${term}*`);
+
+  const { data, count, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const demoAdmin = isNoDeleteUser(actor);
+  const total = count ?? 0;
+  type Row = { id: string; email: string; full_name: string | null; created_at: string; is_admin: boolean };
 
   return NextResponse.json({
-    users: users.map((user:any) => ({
-      id: user.id,
-      email: user.email,
-      full_name: user.fullName,
-      created_at: user.createdAt,
-      is_admin: user.roles.length > 0
+    users: ((data ?? []) as Row[]).map((u) => ({
+      ...u,
+      editable: !demoAdmin || (isEditableByDemoAdmin(u.email) && !u.is_admin)
     })),
-    pagination: {
-      page,
-      pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize)
-    }
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
   });
 }
 
@@ -89,45 +81,33 @@ export async function POST(req: Request) {
     return errorResponse;
   }
 
-  const parsed = roleMutationSchema.safeParse(await req.json());
+  const parsed = roleMutationSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const { userId } = parsed.data;
-  const adminRole = await prisma.role.findUnique({ where: { name: "admin" }, select: { id: true } });
-
-  if (!adminRole) {
+  const roleId = await adminRoleId();
+  if (!roleId) {
     return NextResponse.json({ error: "Admin role not found" }, { status: 500 });
   }
 
-  const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!targetUser) {
+  if (!(await existingUserIds([userId])).has(userId)) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId,
-        roleId: adminRole.id
-      }
-    },
-    create: {
-      userId,
-      roleId: adminRole.id,
-      createdBy: user?.id ?? null
-    },
-    update: {}
-  });
+  const blocked = await guardDemoAdminTargets(user, [userId]);
+  if (blocked) return blocked;
 
-  await writeAdminAuditLog({
-    actorUserId: user?.id,
-    action: "assign_admin_role",
-    entityType: "user",
-    entityId: userId
-  });
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase
+    .from("user_roles")
+    .upsert({ user_id: userId, role_id: roleId, created_by: user.id }, { onConflict: "user_id,role_id", ignoreDuplicates: true });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
+  await writeAdminAuditLog({ actorUserId: user.id, action: "assign_admin_role", entityType: "user", entityId: userId });
   return NextResponse.json({ ok: true });
 }
 
@@ -137,52 +117,40 @@ export async function DELETE(req: Request) {
     return errorResponse;
   }
 
-  const parsed = roleMutationSchema.safeParse(await req.json());
+  if (isNoDeleteUser(user)) {
+    return NextResponse.json({ error: "The demo admin can't remove admin roles." }, { status: 403 });
+  }
+
+  const parsed = roleMutationSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const { userId } = parsed.data;
-  const adminRole = await prisma.role.findUnique({ where: { name: "admin" }, select: { id: true } });
-
-  if (!adminRole) {
+  const roleId = await adminRoleId();
+  if (!roleId) {
     return NextResponse.json({ error: "Admin role not found" }, { status: 500 });
   }
 
-  const adminCount = await prisma.userRole.count({ where: { roleId: adminRole.id } });
-  const targetHasAdmin = await prisma.userRole.findUnique({
-    where: {
-      userId_roleId: {
-        userId,
-        roleId: adminRole.id
-      }
-    },
-    select: { userId: true }
-  });
+  const supabase = createServiceRoleClient();
+  const [{ count }, { data: target }] = await Promise.all([
+    supabase.from("user_roles").select("user_id", { count: "exact", head: true }).eq("role_id", roleId),
+    supabase.from("user_roles").select("user_id").eq("role_id", roleId).eq("user_id", userId).maybeSingle()
+  ]);
 
-  if (!targetHasAdmin) {
+  if (!target) {
     return NextResponse.json({ error: "User is not an admin" }, { status: 400 });
   }
 
-  if (adminCount <= 1) {
+  if ((count ?? 0) <= 1) {
     return NextResponse.json({ error: "Cannot remove the last admin" }, { status: 400 });
   }
 
-  await prisma.userRole.delete({
-    where: {
-      userId_roleId: {
-        userId,
-        roleId: adminRole.id
-      }
-    }
-  });
+  const { error } = await supabase.from("user_roles").delete().eq("role_id", roleId).eq("user_id", userId);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  await writeAdminAuditLog({
-    actorUserId: user?.id,
-    action: "remove_admin_role",
-    entityType: "user",
-    entityId: userId
-  });
-
+  await writeAdminAuditLog({ actorUserId: user.id, action: "remove_admin_role", entityType: "user", entityId: userId });
   return NextResponse.json({ ok: true });
 }

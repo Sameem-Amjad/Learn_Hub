@@ -6,10 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "seed:hub": "node scripts/seed-hub.mjs"
   },
   "keywords": [
     "nextjs",
@@ -22,7 +21,6 @@
   "private": true,
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@prisma/client": "^6.16.2",
     "@stripe/stripe-js": "^9.0.1",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
@@ -50,7 +48,6 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.2",
     "postcss": "^8.5.8",
-    "prisma": "^6.16.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2"
   }

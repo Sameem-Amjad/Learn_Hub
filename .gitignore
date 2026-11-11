@@ -7,3 +7,6 @@ out
 .vercel
 coverage
 *.log
+scripts/.media/
+.history/
+*.tsbuildinfo

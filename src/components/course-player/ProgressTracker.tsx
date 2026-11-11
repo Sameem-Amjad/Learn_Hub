@@ -1,12 +1,11 @@
-import { Badge } from "@/components/ui/badge";
+import { ProgressBar } from "@/components/ui/progress";
 
-export function ProgressTracker({ value }: { value: number }) {
+export function ProgressTracker({ value, completed }: { value: number; completed: boolean }) {
+  const pct = completed ? 100 : Math.min(100, Math.round(value));
   return (
-    <div className="space-y-2">
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, value)}%` }} />
-      </div>
-      <Badge>{value}% complete</Badge>
+    <div className="space-y-1">
+      <ProgressBar value={pct} label="Lesson progress" />
+      <p className="text-xs text-muted-foreground">{completed ? "Completed" : `${pct}% watched`}</p>
     </div>
   );
 }

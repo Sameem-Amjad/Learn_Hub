@@ -12,6 +12,7 @@ interface RoleUser {
   email: string;
   full_name: string | null;
   is_admin: boolean;
+  editable: boolean;
 }
 
 export function AdminRolesManagement() {
@@ -85,11 +86,12 @@ export function AdminRolesManagement() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Admin Roles Management</CardTitle>
+        <CardTitle>Admin roles</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex items-center gap-2">
           <input
+            aria-label="Search users"
             className="h-10 flex-1 rounded-md border border-border bg-transparent px-3 text-sm"
             placeholder="Search by email or name"
             value={search}
@@ -105,11 +107,10 @@ export function AdminRolesManagement() {
         <div className="space-y-3">
           {users.length === 0 ? <p className="text-sm text-muted-foreground">No users found.</p> : null}
           {users.map((user) => (
-            <div key={user.id} className="flex items-center justify-between rounded border border-border p-3">
-              <div>
+            <div key={user.id} className="flex flex-col gap-2 rounded border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">{user.full_name ?? user.email}</p>
-                <p className="text-xs text-muted-foreground">{user.email}</p>
-                <p className="text-xs text-muted-foreground">{user.id}</p>
+                <p className="truncate text-xs text-muted-foreground">{user.email}</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`text-xs ${user.is_admin ? "text-primary" : "text-muted-foreground"}`}>
@@ -119,20 +120,24 @@ export function AdminRolesManagement() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    disabled={!user.editable}
+                    title={user.editable ? undefined : "The demo admin can't remove admin roles"}
                     onClick={() => removeAdmin(user.id)}
                     isLoading={busyUserId === user.id && busyAction === "remove"}
                     loadingText="Removing..."
                   >
-                    Remove Admin
+                    Remove admin
                   </Button>
                 ) : (
                   <Button
                     size="sm"
+                    disabled={!user.editable}
+                    title={user.editable ? undefined : "Read-only for the demo admin"}
                     onClick={() => assignAdmin(user.id)}
                     isLoading={busyUserId === user.id && busyAction === "assign"}
                     loadingText="Assigning..."
                   >
-                    Make Admin
+                    Make admin
                   </Button>
                 )}
               </div>
