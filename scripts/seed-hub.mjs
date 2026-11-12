@@ -102,11 +102,15 @@ for (const rel of uploads) {
     console.log(`  ! missing ${rel}: run scripts/make-media.mjs first`);
     continue;
   }
-  const { error } = await sb.storage.from(BUCKET).upload(rel, fs.readFileSync(local), {
-    contentType: TYPES[rel.slice(rel.lastIndexOf("."))],
-    upsert: true
-  });
-  if (error) throw new Error(`upload ${rel}: ${error.message}`);
+  for (let attempt = 1; ; attempt++) {
+    const { error } = await sb.storage.from(BUCKET).upload(rel, fs.readFileSync(local), {
+      contentType: TYPES[rel.slice(rel.lastIndexOf("."))],
+      upsert: true
+    });
+    if (!error) break;
+    if (attempt >= 4) throw new Error(`upload ${rel}: ${error.message}`);
+    await new Promise((r) => setTimeout(r, 1500 * attempt)); // storage occasionally drops a request
+  }
   uploaded++;
 }
 console.log(`✓ ${uploaded}/${uploads.length} files in ${BUCKET}`);
@@ -191,6 +195,8 @@ console.log("✓ progress, notes and bookmarks");
 
 // ---- 7. audit log ----------------------------------------------------------
 const A = (n) => `90000000-0000-4000-8000-00000000000${n}`;
+// A reset starts the log clean: entries made by visitors or test runs go.
+must("clear audit", await sb.from("admin_audit_logs").delete().not("id", "in", `(${[1, 2, 3, 4, 5].map(A).join(",")})`));
 must("audit", await sb.from("admin_audit_logs").upsert([
   { id: A(1), actor_user_id: ids.elena, action: "publish_courses", entity_type: "course", entity_id: null, metadata: { ids: [COURSES[2].id] }, created_at: at(-21) },
   { id: A(2), actor_user_id: ids.elena, action: "assign_admin_role", entity_type: "user", entity_id: ids.admin, metadata: {}, created_at: at(-18) },
