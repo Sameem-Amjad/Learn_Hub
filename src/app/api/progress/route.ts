@@ -43,7 +43,9 @@ export async function POST(req: Request) {
     }
   }
 
-  // A finished lesson stays finished when it is watched again.
+  // A finished lesson stays finished when it is watched again. Position saves
+  // never write `completed` at all, so one that races a completion (a video's
+  // pause and ended events fire together) can't undo it.
   const { data: existing } = await client
     .from("user_progress")
     .select("completed,completed_at")
@@ -52,19 +54,14 @@ export async function POST(req: Request) {
     .maybeSingle();
   const prior = existing as { completed: boolean; completed_at: string | null } | null;
   const now = new Date().toISOString();
-  const completed = Boolean(prior?.completed || body.completed);
+  const position = { user_id: user.id, lesson_id: body.lessonId, last_position: body.lastPosition ?? 0, updated_at: now };
 
-  const { error } = await client.from("user_progress").upsert(
-    {
-      user_id: user.id,
-      lesson_id: body.lessonId,
-      completed,
-      last_position: body.lastPosition ?? 0,
-      completed_at: completed ? (prior?.completed_at ?? now) : null,
-      updated_at: now
-    },
-    { onConflict: "user_id,lesson_id" }
-  );
+  const { error } = await client
+    .from("user_progress")
+    .upsert(body.completed ? { ...position, completed: true, completed_at: prior?.completed_at ?? now } : position, {
+      onConflict: "user_id,lesson_id"
+    });
+  const completed = Boolean(prior?.completed || body.completed);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
