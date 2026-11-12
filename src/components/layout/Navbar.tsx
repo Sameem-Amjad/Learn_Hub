@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/utils/admin-auth";
 
@@ -43,11 +43,11 @@ export async function Navbar() {
             </>
           ) : (
             <>
-              <Link href="/login">
-                <Button variant="ghost" size="sm">Log in</Button>
+              <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Log in
               </Link>
-              <Link href="/signup">
-                <Button size="sm">Get started</Button>
+              <Link href="/signup" className={buttonVariants({ size: "sm" })}>
+                Get started
               </Link>
             </>
           )}

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const stats = [
@@ -108,13 +108,11 @@ export function LandingExperience() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/signup">
-              <Button size="lg">Start Learning Today</Button>
+            <Link href="/signup" className={buttonVariants({ size: "lg" })}>
+              Start Learning Today
             </Link>
-            <Link href="/pricing">
-              <Button size="lg" variant="secondary">
-                Compare Plans
-              </Button>
+            <Link href="/pricing" className={buttonVariants({ size: "lg", variant: "secondary" })}>
+              Compare Plans
             </Link>
           </div>
 
@@ -260,13 +258,11 @@ export function LandingExperience() {
             Choose your tier, unlock your roadmap, and build momentum with premium learning systems built for real outcomes.
           </p>
           <div className="mt-6 flex justify-center gap-3">
-            <Link href="/pricing">
-              <Button size="lg">Choose Plan</Button>
+            <Link href="/pricing" className={buttonVariants({ size: "lg" })}>
+              Choose Plan
             </Link>
-            <Link href="/signup">
-              <Button size="lg" variant="secondary">
-                Create Account
-              </Button>
+            <Link href="/signup" className={buttonVariants({ size: "lg", variant: "secondary" })}>
+              Create Account
             </Link>
           </div>
         </motion.div>
