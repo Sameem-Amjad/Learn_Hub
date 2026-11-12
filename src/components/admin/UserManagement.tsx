@@ -148,7 +148,7 @@ export function UserManagement() {
         </div>
 
         <p className="mb-2 text-xs text-muted-foreground" aria-live="polite">
-          {isLoading || isFetching ? "Loading users…" : pagination ? `${pagination.total} users` : ""}
+          {isLoading || isFetching ? "Loading users…" : pagination ? `${pagination.total} ${pagination.total === 1 ? "user" : "users"}` : ""}
         </p>
         <ul className="space-y-2">
           {!isLoading && users.length === 0 ? <li className="text-sm text-muted-foreground">No users match these filters.</li> : null}

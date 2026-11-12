@@ -93,7 +93,7 @@ export function PricingPlans({
                 {isCurrent ? <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold">Your plan</span> : null}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">{plan.blurb}</p>
-              <p className="mt-5 text-4xl font-bold">${price}</p>
+              <p className="mt-5 text-4xl font-bold">${price.toLocaleString("en-US")}</p>
               <p className="text-xs text-muted-foreground">{yearly ? "per year" : "per month"}</p>
               <ul className="mt-5 flex-1 space-y-2 text-sm">
                 {plan.features.map((f) => (

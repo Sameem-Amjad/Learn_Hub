@@ -32,6 +32,9 @@ export function CoursePlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastSaved = useRef(initialPosition);
+  // Set the moment completion is first sent, so repeated time updates past 90%
+  // (and the ended event) don't send it again.
+  const completing = useRef(initiallyCompleted);
   const [completed, setCompleted] = useState(initiallyCompleted);
   const [percent, setPercent] = useState(initiallyCompleted ? 100 : 0);
   const [saving, setSaving] = useState(false);
@@ -46,7 +49,7 @@ export function CoursePlayer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ lessonId: lesson.id, lastPosition: Math.floor(position), completed: markComplete })
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error("save failed");
         lastSaved.current = position;
         setSavedAt(Math.floor(position));
         if (markComplete && !completed) {
@@ -55,6 +58,7 @@ export function CoursePlayer({
           toast.success("Lesson completed.");
         }
       } catch {
+        if (markComplete) completing.current = completed;
         toast.error("Couldn't save your progress. Check your connection.");
       } finally {
         setSaving(false);
@@ -75,7 +79,8 @@ export function CoursePlayer({
     const v = videoRef.current;
     if (!v || !v.duration) return;
     if (!completed) setPercent((v.currentTime / v.duration) * 100);
-    if (!completed && v.currentTime / v.duration >= DONE_AT) {
+    if (!completing.current && v.currentTime / v.duration >= DONE_AT) {
+      completing.current = true;
       void save(v.currentTime, true);
     } else if (Math.abs(v.currentTime - lastSaved.current) >= SAVE_EVERY_S) {
       lastSaved.current = v.currentTime; // claim the slot before the request returns
@@ -128,7 +133,11 @@ export function CoursePlayer({
             onLoadedMetadata={onLoadedMetadata}
             onTimeUpdate={onTimeUpdate}
             onPause={onPause}
-            onEnded={() => !completed && void save(videoRef.current?.currentTime ?? 0, true)}
+            onEnded={() => {
+              if (completing.current) return;
+              completing.current = true;
+              void save(videoRef.current?.currentTime ?? 0, true);
+            }}
             controlsList="nodownload"
           />
         </div>
@@ -143,7 +152,16 @@ export function CoursePlayer({
             {saving ? "Saving…" : savedAt !== null && !completed ? "Progress saved" : ""}
           </span>
           {completed ? null : (
-            <Button size="sm" variant="secondary" onClick={() => save(videoRef.current?.currentTime ?? 0, true)} isLoading={saving} loadingText="Saving…">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                completing.current = true;
+                void save(videoRef.current?.currentTime ?? 0, true);
+              }}
+              isLoading={saving}
+              loadingText="Saving…"
+            >
               Mark as complete
             </Button>
           )}
