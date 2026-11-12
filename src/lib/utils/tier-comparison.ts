@@ -6,11 +6,19 @@ export const tierLevels: Record<SubscriptionTier, number> = {
   pro: 3
 };
 
-export const PRICE_ID_TO_TIER: Record<string, SubscriptionTier> = {
-  [process.env.STRIPE_PRICE_INSIDER ?? ""]: "insider",
-  [process.env.STRIPE_PRICE_CORE ?? ""]: "core",
-  [process.env.STRIPE_PRICE_PRO ?? ""]: "pro"
-};
+/** Monthly and yearly Stripe price ids, mapped back to their tier (unset ones are skipped). */
+export const PRICE_ID_TO_TIER: Record<string, SubscriptionTier> = Object.fromEntries(
+  (
+    [
+      [process.env.STRIPE_PRICE_INSIDER, "insider"],
+      [process.env.STRIPE_PRICE_INSIDER_YEARLY, "insider"],
+      [process.env.STRIPE_PRICE_CORE, "core"],
+      [process.env.STRIPE_PRICE_CORE_YEARLY, "core"],
+      [process.env.STRIPE_PRICE_PRO, "pro"],
+      [process.env.STRIPE_PRICE_PRO_YEARLY, "pro"]
+    ] as const
+  ).filter(([id]) => Boolean(id)) as [string, SubscriptionTier][]
+);
 
 export function hasAccess(userTier: SubscriptionTier, requiredTier: SubscriptionTier): boolean {
   return tierLevels[userTier] >= tierLevels[requiredTier];

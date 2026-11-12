@@ -12,6 +12,7 @@ const schema = z.object({
   interval: z.enum(["month", "year"]).default("month")
 });
 
+/** Monthly price ids; yearly ones add _YEARLY (STRIPE_PRICE_CORE_YEARLY and so on). */
 const PRICE_ENV = { insider: "STRIPE_PRICE_INSIDER", core: "STRIPE_PRICE_CORE", pro: "STRIPE_PRICE_PRO" } as const;
 
 export async function POST(req: Request) {
@@ -34,9 +35,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ url: `/dashboard?plan=${tier}` });
     }
 
-    const priceId = process.env[PRICE_ENV[tier]];
+    const priceId = process.env[`${PRICE_ENV[tier]}${interval === "year" ? "_YEARLY" : ""}`];
     if (!priceId) {
-      return NextResponse.json({ error: "This plan is not available yet." }, { status: 400 });
+      return NextResponse.json(
+        { error: interval === "year" ? "Yearly billing isn't available for this plan yet. Choose monthly." : "This plan is not available yet." },
+        { status: 400 }
+      );
     }
 
     const serviceClient = createServiceRoleClient();

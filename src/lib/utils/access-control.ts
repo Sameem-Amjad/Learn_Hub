@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { planIsLive } from "@/lib/utils/plan";
 import { hasAccess } from "@/lib/utils/tier-comparison";
 import type { SubscriptionTier } from "@/types/subscription";
 
@@ -8,12 +9,11 @@ export const getActiveSubscription = cache(async (userId: string) => {
   const supabase = createServiceRoleClient();
   const { data } = await supabase
     .from("subscriptions")
-    .select("tier,status,current_period_end")
+    .select("tier,status,current_period_end,stripe_subscription_id")
     .eq("user_id", userId)
-    .in("status", ["active", "trialing"])
     .maybeSingle();
 
-  return data;
+  return planIsLive(data) ? data : null;
 });
 
 export async function checkCourseAccess(userId: string, courseId: string): Promise<boolean> {

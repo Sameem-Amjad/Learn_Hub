@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { planIsLive } from "@/lib/utils/plan";
 import { hasAccess } from "@/lib/utils/tier-comparison";
 import type { SubscriptionTier } from "@/types/subscription";
 
@@ -59,10 +60,10 @@ export const getSubscription = cache(async (userId: string) => {
   } | null;
 });
 
-/** The tier the user can use right now: only active or trialing plans count. */
+/** The tier the user can use right now (see planIsLive). */
 export const getUserTier = cache(async (userId: string): Promise<SubscriptionTier | null> => {
   const sub = await getSubscription(userId);
-  return sub && (sub.status === "active" || sub.status === "trialing") ? sub.tier : null;
+  return sub && planIsLive(sub) ? sub.tier : null;
 });
 
 export const getProfile = cache(async (userId: string) => {

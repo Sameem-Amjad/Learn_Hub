@@ -44,6 +44,7 @@ Set price IDs in `.env.local`:
 - `STRIPE_PRICE_INSIDER`
 - `STRIPE_PRICE_CORE`
 - `STRIPE_PRICE_PRO`
+- Optional yearly prices: `STRIPE_PRICE_INSIDER_YEARLY`, `STRIPE_PRICE_CORE_YEARLY`, `STRIPE_PRICE_PRO_YEARLY`
 
 ## API Endpoints
 

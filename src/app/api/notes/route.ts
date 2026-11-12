@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { LESSON_DENIED, lessonAccess } from "@/lib/server/lesson-access";
 import { createServiceRoleClient, getCurrentUser } from "@/lib/supabase/server";
 
 const createSchema = z.object({
@@ -50,6 +51,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Write a note of up to 2,000 characters." }, { status: 400 });
   }
   const body = parsed.data;
+  const access = await lessonAccess(user.id, body.lessonId);
+  if (access !== "ok") {
+    return NextResponse.json({ error: LESSON_DENIED[access].error }, { status: LESSON_DENIED[access].status });
+  }
   const client = createServiceRoleClient();
   const { data, error } = await client
     .from("notes")

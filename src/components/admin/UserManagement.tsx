@@ -154,7 +154,8 @@ export function UserManagement() {
           {!isLoading && users.length === 0 ? <li className="text-sm text-muted-foreground">No users match these filters.</li> : null}
           {users.map((user) => {
             const sub = user.subscription;
-            const active = sub && (sub.status === "active" || sub.status === "trialing");
+            // A past end date reads as ended, whatever the status says.
+            const active = sub && (sub.status === "active" || sub.status === "trialing") && (!sub.current_period_end || new Date(sub.current_period_end).getTime() >= Date.now());
             const chosen = grantTier[user.id] ?? "pro";
             return (
               <li key={user.id} className="flex flex-col gap-3 rounded-lg border border-border p-3 md:flex-row md:items-center">

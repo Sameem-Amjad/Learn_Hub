@@ -7,6 +7,7 @@ import { DEMO_MODE } from "@/lib/demo";
 import { getSubscription } from "@/lib/server/learning-data";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { STATUS_LABEL, TIER_LABEL, shortDate } from "@/lib/utils/format";
+import { planIsLive } from "@/lib/utils/plan";
 
 export default async function BillingPage() {
   const user = await getCurrentUser();
@@ -15,7 +16,7 @@ export default async function BillingPage() {
   }
 
   const sub = await getSubscription(user.id);
-  const active = sub && (sub.status === "active" || sub.status === "trialing");
+  const active = planIsLive(sub);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -27,7 +28,7 @@ export default async function BillingPage() {
           <>
             <div className="flex items-center gap-2">
               <span className="text-2xl font-semibold">{TIER_LABEL[sub.tier]}</span>
-              <Badge className={active ? "" : "bg-muted text-muted-foreground"}>{STATUS_LABEL[sub.status] ?? sub.status}</Badge>
+              <Badge className={active ? "" : "bg-muted text-muted-foreground"}>{active || sub.status !== "active" ? (STATUS_LABEL[sub.status] ?? sub.status) : "Ended"}</Badge>
             </div>
             <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[160px_1fr]">
               <dt className="text-muted-foreground">Current period</dt>

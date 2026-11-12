@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getUserTier } from "@/lib/server/learning-data";
+import { LESSON_DENIED, lessonAccess } from "@/lib/server/lesson-access";
 import { createServiceRoleClient, getCurrentUser } from "@/lib/supabase/server";
-import { hasAccess } from "@/lib/utils/tier-comparison";
-import type { SubscriptionTier } from "@/types/subscription";
 
 const schema = z.object({
   lessonId: z.string().uuid(),
@@ -27,20 +25,9 @@ export async function POST(req: Request) {
   const client = createServiceRoleClient();
 
   // Only lessons the learner can open: previews, or their plan's tier.
-  const { data: lesson } = await client
-    .from("lessons")
-    .select("id,is_preview,modules!inner(courses!inner(required_tier,is_published))")
-    .eq("id", body.lessonId)
-    .maybeSingle();
-  const course = (lesson as { is_preview: boolean; modules: { courses: { required_tier: SubscriptionTier; is_published: boolean } } } | null);
-  if (!course || !course.modules.courses.is_published) {
-    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
-  }
-  if (!course.is_preview) {
-    const tier = await getUserTier(user.id);
-    if (!tier || !hasAccess(tier, course.modules.courses.required_tier)) {
-      return NextResponse.json({ error: "This lesson needs a higher plan" }, { status: 403 });
-    }
+  const access = await lessonAccess(user.id, body.lessonId);
+  if (access !== "ok") {
+    return NextResponse.json({ error: LESSON_DENIED[access].error }, { status: LESSON_DENIED[access].status });
   }
 
   // A finished lesson stays finished when it is watched again. Position saves

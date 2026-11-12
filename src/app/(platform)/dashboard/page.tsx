@@ -7,6 +7,7 @@ import { ProgressBar } from "@/components/ui/progress";
 import { getCoursesForUser, getDashboardProgress, getProfile, getSubscription } from "@/lib/server/learning-data";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/utils/admin-auth";
+import { planIsLive } from "@/lib/utils/plan";
 import { STATUS_LABEL, TIER_LABEL, clock, shortDate } from "@/lib/utils/format";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
@@ -25,14 +26,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   ]);
 
   const firstName = (profile?.full_name ?? "").split(" ")[0];
-  const planActive = subscription && (subscription.status === "active" || subscription.status === "trialing");
+  const planActive = planIsLive(subscription);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-10">
       <h1 className="text-3xl font-bold">{firstName ? `Welcome back, ${firstName}` : "Welcome to LearnHub"}</h1>
       <p className="mt-2 text-muted-foreground">Pick up where you left off, or start something new.</p>
 
-      {justActivated && planActive ? (
+      {justActivated && subscription && planActive ? (
         <p role="status" className="mt-6 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm">
           Your {TIER_LABEL[subscription.tier]} plan is active. Every course it covers is now unlocked.
         </p>
@@ -94,7 +95,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl font-semibold">{TIER_LABEL[subscription.tier]}</span>
-                  <Badge className={planActive ? "" : "bg-muted text-muted-foreground"}>{STATUS_LABEL[subscription.status] ?? subscription.status}</Badge>
+                  <Badge className={planActive ? "" : "bg-muted text-muted-foreground"}>{planActive || subscription.status !== "active" ? (STATUS_LABEL[subscription.status] ?? subscription.status) : "Ended"}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {planActive
