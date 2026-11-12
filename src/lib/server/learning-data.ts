@@ -141,49 +141,66 @@ export const getProgressMap = cache(async (userId: string) => {
   );
 });
 
-/** Overall progress across published courses, plus the lesson to resume. */
+/** Overall progress across published courses, plus the lesson to pick up next. */
 export async function getDashboardProgress(userId: string) {
   const supabase = createServiceRoleClient();
   const [lessonsRes, progress] = await Promise.all([
     supabase
       .from("lessons")
-      .select("id,title,slug,duration,modules!inner(slug,title,courses!inner(slug,title,is_published))")
+      .select("id,title,slug,duration,order_index,modules!inner(slug,title,order_index,courses!inner(id,slug,title,order_index,is_published))")
       .eq("modules.courses.is_published", true),
     getProgressMap(userId)
   ]);
 
   type Row = {
-    id: string; title: string; slug: string; duration: number | null;
-    modules: { slug: string; title: string; courses: { slug: string; title: string; is_published: boolean } };
+    id: string; title: string; slug: string; duration: number | null; order_index: number;
+    modules: { slug: string; title: string; order_index: number; courses: { id: string; slug: string; title: string; order_index: number; is_published: boolean } };
   };
-  const lessons = (lessonsRes.data ?? []) as unknown as Row[];
-  const byId = new Map(lessons.map((l) => [l.id, l]));
+  // Course order, then module order, then lesson order.
+  const lessons = ((lessonsRes.data ?? []) as unknown as Row[]).sort(
+    (a, b) =>
+      a.modules.courses.order_index - b.modules.courses.order_index ||
+      a.modules.order_index - b.modules.order_index ||
+      a.order_index - b.order_index
+  );
 
   const totalLessons = lessons.length;
   const completedLessons = lessons.filter((l) => progress.get(l.id)?.completed).length;
   const completionRate = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
-  // Most recently touched lesson that still exists in a published course.
-  const latest = [...progress.entries()]
-    .filter(([id]) => byId.has(id))
-    .sort((a, b) => b[1].updated_at.localeCompare(a[1].updated_at))[0];
-  const latestLesson = latest ? byId.get(latest[0])! : null;
+  // The most recently touched lesson; if it is finished, the next unfinished one in the same course.
+  const touched = lessons
+    .filter((l) => progress.has(l.id))
+    .sort((a, b) => progress.get(b.id)!.updated_at.localeCompare(progress.get(a.id)!.updated_at))[0];
+  let pick = touched ?? null;
+  let upNext = false;
+  if (touched && progress.get(touched.id)?.completed) {
+    const sameCourse = lessons.filter((l) => l.modules.courses.id === touched.modules.courses.id);
+    const after = sameCourse.slice(sameCourse.findIndex((l) => l.id === touched.id) + 1);
+    const next = after.find((l) => !progress.get(l.id)?.completed) ?? sameCourse.find((l) => !progress.get(l.id)?.completed);
+    if (next) {
+      pick = next;
+      upNext = true;
+    }
+  }
+  const state = pick ? progress.get(pick.id) : undefined;
 
   return {
     totalLessons,
     completedLessons,
     completionRate,
-    latestLessonId: latestLesson?.id ?? null,
-    latestPosition: latest?.[1].last_position ?? 0,
-    resume: latestLesson
+    latestLessonId: touched?.id ?? null,
+    latestPosition: touched ? (progress.get(touched.id)?.last_position ?? 0) : 0,
+    resume: pick
       ? {
-          title: latestLesson.title,
-          courseTitle: latestLesson.modules.courses.title,
-          moduleTitle: latestLesson.modules.title,
-          href: `/courses/${latestLesson.modules.courses.slug}/${latestLesson.modules.slug}/${latestLesson.slug}`,
-          position: latest![1].last_position,
-          duration: latestLesson.duration,
-          completed: latest![1].completed
+          title: pick.title,
+          courseTitle: pick.modules.courses.title,
+          moduleTitle: pick.modules.title,
+          href: `/courses/${pick.modules.courses.slug}/${pick.modules.slug}/${pick.slug}`,
+          position: state?.last_position ?? 0,
+          duration: pick.duration,
+          completed: Boolean(state?.completed),
+          upNext
         }
       : null
   };

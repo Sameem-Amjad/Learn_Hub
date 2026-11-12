@@ -49,12 +49,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <p className="text-sm text-muted-foreground">{progress.resume.courseTitle}</p>
                 <p className="font-medium">{progress.resume.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {progress.resume.completed
-                    ? "Completed"
-                    : `Stopped at ${clock(progress.resume.position)}${progress.resume.duration ? ` of ${clock(progress.resume.duration)}` : ""}`}
+                  {progress.resume.upNext
+                    ? "Up next in this course"
+                    : progress.resume.completed
+                      ? "Course complete: watch it again any time"
+                      : progress.resume.position > 0
+                        ? `Stopped at ${clock(progress.resume.position)}${progress.resume.duration ? ` of ${clock(progress.resume.duration)}` : ""}`
+                        : "Not started yet"}
                 </p>
                 <Link href={progress.resume.href} className="inline-block text-sm font-medium text-primary underline">
-                  Resume lesson
+                  {progress.resume.upNext || progress.resume.position === 0 ? "Start lesson" : "Resume lesson"}
                 </Link>
               </>
             ) : (
