@@ -9,8 +9,8 @@ export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 /** The public demo logins, shown on the login page in demo mode. */
 export const DEMO_LOGINS = [
-  { label: "Learner (Pro plan)", email: "omar.khan@demo.learnhub.dev", password: "LearnHub@2026" },
-  { label: "Admin", email: "demo.admin@demo.learnhub.dev", password: "LearnHub@2026" }
+  { label: "Learner (Pro plan)", email: "omar.khan@demo.learnhub.dev", password: "LearnHub@2026", next: "/dashboard" },
+  { label: "Admin", email: "demo.admin@demo.learnhub.dev", password: "LearnHub@2026", next: "/admin" }
 ] as const;
 
 /**

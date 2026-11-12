@@ -19,7 +19,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
 
-  async function signIn(withEmail: string, withPassword: string, key: string) {
+  async function signIn(withEmail: string, withPassword: string, key: string, to = next) {
     setLoading(key);
     try {
       const { error } = await createClient().auth.signInWithPassword({ email: withEmail, password: withPassword });
@@ -28,7 +28,7 @@ function LoginForm() {
         return;
       }
       toast.success("Signed in.");
-      router.push(next);
+      router.push(to);
       router.refresh();
     } catch {
       toast.error("Something went wrong while signing in.");
@@ -73,7 +73,7 @@ function LoginForm() {
                 key={d.email}
                 variant="secondary"
                 size="sm"
-                onClick={() => signIn(d.email, d.password, d.email)}
+                onClick={() => signIn(d.email, d.password, d.email, d.next)}
                 isLoading={loading === d.email}
                 loadingText="Signing in…"
               >
